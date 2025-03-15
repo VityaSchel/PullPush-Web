@@ -1,7 +1,7 @@
 <script lang="ts">
 	import MarkdownIt from 'markdown-it';
 	import { highlights } from './stores';
-	import { higlight, replaceRedditLinksWithImages, sanitizeHtml } from './utils';
+	import { higlight, sanitizeHtml } from './utils';
 	import { friendlyAttrValue } from 'xss';
 	const md = new MarkdownIt({
 		html: true,
@@ -32,12 +32,92 @@
 		let text = friendlyAttrValue(token.content.replaceAll(/\n/g, '<br />'));
 		return `<pre>${text}</pre>`;
 	};
+	
+	md.inline.ruler.before('text', 'spoiler', (state, silent) => {
+		const start = state.pos
+		if (state.src.slice(start, start + 2) !== '!!') return false
+
+		const end = state.src.indexOf('!!', start + 2)
+		if (end === -1) return false
+
+		if (!silent) {
+			const token = state.push('spoiler', '', 0)
+			token.content = state.src.slice(start + 2, end)
+		}
+
+		state.pos = end + 2
+		return true
+	})
+	md.renderer.rules.spoiler = (tokens, idx) => {
+		return `<span class="spoiler">${tokens[idx].content}</span>`
+	}
+	const replaceSpoilerTags = (source: string) => {
+		return source.replaceAll(/&gt;!([^\n]*?)!&lt;/g, '!!$1!!')
+	}
+
+	md.inline.ruler.before('text', 'superscript', (state, silent) => {
+		const start = state.pos
+		if (state.src.slice(start, start + 2) !== '^(') return false
+
+		const end = state.src.indexOf(')', start + 1)
+		if (end === -1) return false
+
+		if (!silent) {
+			const token = state.push('superscript', '', 0)
+			token.content = state.src.slice(start + 2, end)
+		}
+
+		state.pos = end + 2
+		return true
+	})
+	md.renderer.rules.superscript = (tokens, idx) => {
+		return `<sup>${tokens[idx].content}</sup>`
+	}
+
+	md.inline.ruler.before('text', 'superscriptshort', (state, silent) => {
+		const start = state.pos
+		if (state.src.slice(start, start + 1) !== '^') return false
+
+		let end = state.src.indexOf(' ', start + 1)
+		if (end === -1) {
+			end = state.src.length - 1
+		}
+
+		const forbiddenCharacters = ['(', ')', '^', '[', ']']
+		if(forbiddenCharacters.some(char => state.src.slice(start + 1, end).includes(char))) {
+			return false
+		}
+		
+		if (!silent) {
+			const token = state.push('superscriptshort', '', 0)
+			token.content = state.src.slice(start + 1, end + 1)
+		}
+
+		state.pos = end + 1
+		return true
+	})
+	md.renderer.rules.superscriptshort = (tokens, idx) => {
+		return `<sup>${tokens[idx].content}</sup>`
+	}
+
 	export let source: string;
-	$: renderedMarkdown = md.render(source);
-	$: content = replaceRedditLinksWithImages(sanitizeHtml(renderedMarkdown))
+	$: renderedMarkdown = md.render(replaceSpoilerTags(source))
+	$: console.log(renderedMarkdown)
+	$: content = sanitizeHtml(renderedMarkdown)
+
+	const handleClick = (e: MouseEvent) => {
+		const target = e.target;
+		if(target instanceof HTMLElement) {
+			if (target.classList.contains('spoiler')) {
+				target.classList.add('revealed');
+			}
+		}
+	}
 </script>
 
-<div class="container">
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+<div class="container" on:click={handleClick}>
 	{@html higlight(content, $highlights)}
 </div>
 
@@ -125,5 +205,33 @@
 	:global(.container code) {
 		border: 1px solid #1b1e20;
 		padding: 2px 4px;
+	}
+
+	:global(.container span.spoiler) {
+		background-color: #f1f2f2;
+		color: transparent;
+		transition: background-color 1s ease-out, color 1s ease-out;
+		border-radius: 2px;
+		cursor: pointer;
+		user-select: none;
+	}
+
+	:global(.container span.spoiler.revealed) {
+		background-color: transparent;
+		color: inherit;
+		cursor: auto;
+		user-select: auto;
+	}
+
+	:global(.container td, .container th) {
+		padding: 8px;
+		text-align: left;
+		font-size: 14px;
+	}
+
+	:global(.container sup) {
+		display: inline;
+		vertical-align: super;
+		position: static;
 	}
 </style>

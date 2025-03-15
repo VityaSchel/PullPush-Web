@@ -17,7 +17,7 @@ export function higlight(source: string, highlights: Array<string>) {
 
 const zeroWidthSpaceHtmlEntity = '&amp;#x200B;'
 export function sanitizeHtml(html: string) {
-	return xss(html, {
+	const sanitizedHtml = xss(html, {
 		whiteList: {
 			pre: [],
 			code: [],
@@ -44,13 +44,18 @@ export function sanitizeHtml(html: string) {
 			a: ['href', 'title'],
 			sup: [],
 			hr: [],
+			span: ['class'],
+			thead: [],
+			tr: [],
+			th: [],
+			tbody: [],
+			td: [],
 		},
 	}).replaceAll(zeroWidthSpaceHtmlEntity, '')
-}
 
-export const replaceRedditLinksWithImages = (html: string) => {
 	const domParser = new DOMParser()
-	const dom = domParser.parseFromString(html, 'text/html')
+	const dom = domParser.parseFromString(sanitizedHtml, 'text/html')
+
 	dom.body.querySelectorAll('a').forEach(a => {
 		try {
 			const href = new URL(a.href)
@@ -71,5 +76,16 @@ export const replaceRedditLinksWithImages = (html: string) => {
 			// ignore
 		}
 	})
+
+	dom.body.querySelectorAll('span[class]').forEach(span => {
+		try {
+			if(span.className !== 'spoiler') {
+				span.className = ''
+			}
+		} catch {
+			// ignore
+		}
+	})
+
 	return dom.body.innerHTML
 }
